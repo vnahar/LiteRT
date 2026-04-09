@@ -105,7 +105,6 @@ cc_library(
     deps = [
         ":tokenizer",
         # copybara:uncomment "//devtools/rust:rust_okay_here",  # build_cleaner: keep
-        "@com_google_absl//absl/debugging:leak_check",  # See b/402708346
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",

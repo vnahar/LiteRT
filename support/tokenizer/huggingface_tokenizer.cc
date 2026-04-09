@@ -20,7 +20,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/debugging/leak_check.h"  // from @com_google_absl
 #include "absl/memory/memory.h"  // from @com_google_absl
 #include "absl/status/status.h"  // from @com_google_absl
 #include "absl/status/statusor.h"  // from @com_google_absl
@@ -55,13 +54,7 @@ HuggingFaceTokenizer::CreateFromJson(const std::string& json) {
 // Encodes the given text into a TensorBuffer of token ids.
 absl::StatusOr<std::vector<int>> HuggingFaceTokenizer::TextToTokenIds(
     absl::string_view text) {
-  {
-    // Disable leak check as Google's default leak checker does not properly
-    // support Rust's lazy_static initialization.
-    // TODO(b/379364190) - Remove this once the leak checker is fixed.
-    absl::LeakCheckDisabler disabler;
-    return tokenizer_->Encode(std::string{text});
-  }
+  return tokenizer_->Encode(std::string{text});
 }
 
 absl::StatusOr<int> HuggingFaceTokenizer::TokenToId(absl::string_view token) {
@@ -75,19 +68,13 @@ absl::StatusOr<int> HuggingFaceTokenizer::TokenToId(absl::string_view token) {
 // Decodes the given TensorBuffer of token ids into a vector of strings.
 absl::StatusOr<std::string> HuggingFaceTokenizer::TokenIdsToText(
     const std::vector<int>& token_ids) {
-  {
-    absl::LeakCheckDisabler disabler;
-    // Disable leak check as Google's default leak checker does not properly
-    // support Rust's lazy_static initialization.
-    // TODO(b/379364190) - Remove this once the leak checker is fixed.
-    std::string decoded = tokenizer_->Decode(token_ids);
-    if (Tokenizer::HasBpeSuffix(decoded)) {
-      return absl::DataLossError(
-          "The set of token IDs passed to the tokenizer is part of a BPE "
-          "sequence and needs more tokens to be decoded.");
-    } else {
-      return decoded;
-    }
+  std::string decoded = tokenizer_->Decode(token_ids);
+  if (Tokenizer::HasBpeSuffix(decoded)) {
+    return absl::DataLossError(
+        "The set of token IDs passed to the tokenizer is part of a BPE "
+        "sequence and needs more tokens to be decoded.");
+  } else {
+    return decoded;
   }
 }
 
