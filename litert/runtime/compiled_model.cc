@@ -527,6 +527,10 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
     return {};
   }
 
+  if (jit_compilation_options != nullptr) {
+    jit_compilation_options->weight_loader = weight_loader_;
+  }
+
   if (hardware_accelerators & kLiteRtHwAcceleratorCpu) {
     weight_loader::WeightAccessRequest request;
     request.cpu = true;
@@ -534,33 +538,38 @@ Expected<void> LiteRtCompiledModelT::InitializeRuntime(
     // backends.
     request.opencl = false;
     absl::Status prepare_status = weight_loader_->PrepareAccess(request, env);
+#ifdef __EMSCRIPTEN__
+    if (!prepare_status.ok()) {
+      LITERT_LOG(LITERT_WARNING,
+                 "External weight loader: failed to prepare CPU access: %s. "
+                 "Continuing as weights may be provided via other means (e.g. "
+                 "streaming).",
+                 std::string(prepare_status.message()).c_str());
+    }
+#else
     if (!prepare_status.ok()) {
       weight_loader_ = nullptr;
       return litert::Unexpected(kLiteRtStatusErrorRuntimeFailure,
                                 std::string(prepare_status.message()));
     }
-  }
+#endif
 
-  // Inform delegates and the other components about the weight loader.
-  if (jit_compilation_options != nullptr) {
-    jit_compilation_options->weight_loader = weight_loader_;
-  }
-
-  // Inspect the weight infos to log the available weights for GPU delegates.
-  LITERT_LOG(LITERT_DEBUG,
-             "External weight loader: %zu weight tensors available for GPU "
-             "delegates",
-             weight_infos.size());
-  for (const auto& info : weight_infos) {
-    if (info.packing.empty()) {
-      LITERT_LOG(LITERT_DEBUG,
-                 "  Weight tensor: external_buffer_id=%u, packing=<none>",
-                 info.external_buffer_id);
-    } else {
-      LITERT_LOG(LITERT_DEBUG,
-                 "  Weight tensor: external_buffer_id=%u, packing=%.*s",
-                 info.external_buffer_id, static_cast<int>(info.packing.size()),
-                 info.packing.data());
+    // Inspect the weight infos to log the available weights for GPU delegates.
+    LITERT_LOG(LITERT_DEBUG,
+               "External weight loader: %zu weight tensors available for GPU "
+               "delegates",
+               weight_infos.size());
+    for (const auto& info : weight_infos) {
+      if (info.packing.empty()) {
+        LITERT_LOG(LITERT_DEBUG,
+                   "  Weight tensor: external_buffer_id=%u, packing=<none>",
+                   info.external_buffer_id);
+      } else {
+        LITERT_LOG(LITERT_DEBUG,
+                   "  Weight tensor: external_buffer_id=%u, packing=%.*s",
+                   info.external_buffer_id,
+                   static_cast<int>(info.packing.size()), info.packing.data());
+      }
     }
   }
   return {};
@@ -934,7 +943,19 @@ LiteRtCompiledModelT::Create(LiteRtEnvironmentT* env, LiteRtModel model,
   // Load and restore external weights for CPU execution before delegates are
   // applied. This ensures that XNNPack and other CPU delegates can see the
   // weight data.
-  if (hardware_accelerators & kLiteRtHwAcceleratorCpu) {
+  bool should_restore_cpu = false;
+#if defined(__EMSCRIPTEN__)
+  // On Web, only restore if CPU is the only requested accelerator,
+  // as we want to avoid loading weights to CPU when streaming to GPU.
+  should_restore_cpu = (hardware_accelerators & kLiteRtHwAcceleratorCpu) &&
+                       !(hardware_accelerators &
+                         (kLiteRtHwAcceleratorGpu | kLiteRtHwAcceleratorNpu));
+#else
+  // On non-Web, always restore to support fallback and constant sharing.
+  should_restore_cpu = (hardware_accelerators & kLiteRtHwAcceleratorCpu);
+#endif
+
+  if (should_restore_cpu) {
     LITERT_RETURN_IF_ERROR(compiled_model->RestoreExternalWeightsForCpu());
   }
 

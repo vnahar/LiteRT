@@ -191,7 +191,14 @@ def externalize(
         buffer_idx = int(tensor.buffer)
         if buffer_idx <= 0 or buffer_idx >= len(model.buffers or []):
           continue
-        data = _buffer_bytes(model.buffers[buffer_idx])
+        buffer_obj = model.buffers[buffer_idx]
+        data = _buffer_bytes(buffer_obj)
+        if data is None:
+          offset = getattr(buffer_obj, "offset", 0)
+          size = getattr(buffer_obj, "size", 0)
+          if offset > 0 and size > 0:
+            if offset + size <= len(input_bytes):
+              data = memoryview(input_bytes)[offset : offset + size]
         if data is None:
           continue
 
@@ -227,14 +234,36 @@ def externalize(
 
   still_referenced = _referenced_buffers(model, externalized_tensors)
   cleared_buffers = 0
-  for buffer_idx in candidate_buffers:
-    if buffer_idx not in still_referenced and 0 <= buffer_idx < len(
-        model.buffers
-    ):
-      model.buffers[buffer_idx].data = None
-      model.buffers[buffer_idx].offset = 0
-      model.buffers[buffer_idx].size = 0
+  cleared_buffers = 0
+  inlined_buffers = 0
+  for buffer_idx, buffer in enumerate(model.buffers or []):
+    offset = getattr(buffer, "offset", 0)
+    size = getattr(buffer, "size", 0)
+    if buffer_idx in candidate_buffers and buffer_idx not in still_referenced:
+      buffer.data = None
+      buffer.offset = 0
+      buffer.size = 0
       cleared_buffers += 1
+    elif offset > 0 or size > 0:
+      if size > 0:
+        if offset + size <= len(input_bytes):
+          buffer.data = list(input_bytes[offset : offset + size])
+          buffer.offset = 0
+          buffer.size = 0
+          inlined_buffers += 1
+        else:
+          print(
+              f"Error: Buffer {buffer_idx} offset/size out of bounds for"
+              " inlining"
+          )
+      else:
+        buffer.offset = 0
+        buffer.size = 0
+        inlined_buffers += 1
+        print(f"Cleaned zero-size buffer {buffer_idx} with offset {offset}")
+  print(
+      f"Cleared buffers: {cleared_buffers}, Inlined buffers: {inlined_buffers}"
+  )
 
   builder = flatbuffers.Builder(1024)
   root = model.Pack(builder)
