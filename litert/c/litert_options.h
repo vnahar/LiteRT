@@ -36,6 +36,23 @@ LiteRtStatus LiteRtSetOptionsHardwareAccelerators(
 LiteRtStatus LiteRtGetOptionsHardwareAccelerators(
     LiteRtOptions options, LiteRtHwAcceleratorSet* hardware_accelerators);
 
+// Sets the TFLite signatures that a CompiledModel created with these options
+// prepares for execution.
+//
+// The selected signature keys identify root subgraphs. In the initial
+// implementation, the active subgraph set is the deduplicated root set;
+// subgraphs referenced transitively by control-flow operations are not added.
+//
+// If this function is not called, all subgraphs are active, preserving the
+// existing behavior. An explicit selection must be non-empty and contain
+// non-null, non-empty, unique keys. The strings are copied.
+//
+// Unknown signature keys cause LiteRtCreateCompiledModel to return
+// kLiteRtStatusErrorInvalidArgument before delegates are applied.
+LiteRtStatus LiteRtSetOptionsSelectedSignatures(
+    LiteRtOptions options, size_t num_signature_keys,
+    const char* const* signature_keys);
+
 // Adds compilation options for a specific accelerator to the accelerator
 // compilation option list.
 //

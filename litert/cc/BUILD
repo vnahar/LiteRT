@@ -1201,6 +1201,8 @@ cc_library_with_testonly_vis(
         "//litert/cc/options:litert_runtime_options",
         "//litert/cc/options:litert_samsung_options",
         "//litert/core:options",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/strings:string_view",
     ],
 )
 
