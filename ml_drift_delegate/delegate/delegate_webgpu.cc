@@ -232,7 +232,8 @@ std::unique_ptr<ml_drift::webgpu::ExecutionEnvironment> CreateWebGpuEnvironment(
           &wgpu_flush_cb) == kLiteRtStatusOk &&
       wgpu_flush_cb.int_value != 0) {
     ::ml_drift::webgpu::Instance::SetFlushCallback(
-        reinterpret_cast<::ml_drift::webgpu::Instance::WebGpuFlushCallback>(
+        reinterpret_cast<
+            const ::ml_drift::webgpu::Instance::WebGpuFlushCallback*>(
             wgpu_flush_cb.int_value));
   }
 
